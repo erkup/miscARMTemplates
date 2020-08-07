@@ -1,0 +1,140 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "Vnet": {
+            "type": "string",
+            "metadata": {
+                "description": "Vnet where new VM's will be added"
+            }
+        },
+        "Subnet": {
+            "type": "string",
+            "metadata": {
+                "description": "Subnet where new VM's will be added"
+            }
+        },
+        "Network_RG": {
+            "type": "string",
+            "metadata": {
+                "description": "Resource Group where Azure Vnet resides"
+            }
+        },
+        "NumberOfVm": {
+            "type": "int",
+            "metadata": {
+                "description": "Number of VM's to be created"            
+                }
+        },
+        "VmNamePrefix": {
+            "type": "string",
+            "metadata": {
+                "description": "Name prefix for new VM's to be created"
+            }
+        },
+        "VmImageName": {
+            "type": "string",
+            "metadata": {
+                "description": "Name of the VM Image"
+            }
+        }, 
+        "VmImageResourceGroup": {
+            "type": "string",
+            "metadata": {
+                "description": "Name of the VM Image Resource Group"
+            }
+        },
+      "adminUsername": {
+        "type": "string"
+      },
+      "adminPassword": {
+        "type": "securestring"
+      }
+    },
+    "variables": {
+      "vmName": "[parameters('VmNamePrefix')]",
+      "networkInterfaceName": "[concat(variables('vmName'), '-nic')]",
+      "imageReference": "[resourceId(parameters('VmImageResourceGroup'),'Microsoft.Compute/images', parameters('VmImageName'))]",
+      "virtualMachineSize": "Standard_DS2_v2",
+      "Vnet": "[parameters('Vnet')]",
+      "NetworkRG": "[parameters('Network_RG')]",
+      "subnet": "[parameters('Subnet')]",
+      "subnetRef": "[resourceId(variables('NetworkRG'),'Microsoft.Network/virtualNetworks/subnets',variables('Vnet'),variables('subnet'))]"
+    },
+    "resources": [
+      {
+        "type": "Microsoft.Network/networkInterfaces",
+        "apiVersion": "2018-10-01",
+        "name": "[concat(variables('networkInterfaceName'),copyIndex(1))]",
+        "location": "[resourceGroup().location]",
+        "dependsOn": [
+        ],
+        "copy": {
+          "name": "NIC-Loop",
+          "count": "[parameters('NumberOfVm')]"
+        },
+        "properties": {
+          "ipConfigurations": [
+            {
+              "name": "ipconfig1",
+              "properties": {
+                "subnet": {
+                  "id": "[variables('subnetRef')]"
+                },
+                "privateIPAllocationMethod": "Dynamic"
+              }
+            }
+          ],
+          "enableAcceleratedNetworking": true
+        }
+      },
+      {
+        "type": "Microsoft.Compute/virtualMachines",
+        "apiVersion": "2018-10-01",
+        "name": "[concat(variables('vmName'),copyIndex(1))]",
+        "location": "[resourceGroup().location]",
+        "dependsOn": [
+          "[concat('Microsoft.Network/networkInterfaces/', variables('networkInterfaceName'),copyIndex(1))]"
+        ],
+        "copy": {
+          "name": "VM-Loop",
+          "count": "[parameters('NumberOfVm')]"
+        },
+        "properties": {
+          "hardwareProfile": {
+            "vmSize": "[variables('virtualMachineSize')]"
+          },
+          "storageProfile": {
+            "osDisk": {
+              "name": "[concat(variables('vmName'),copyIndex(1),'-OSDisk')]",
+              "createOption": "fromImage",
+              "managedDisk": {
+                "storageAccountType": "StandardSSD_LRS"
+              }
+            },
+            "imageReference": {
+              "id":"[variables('imageReference')]"
+            }
+          },
+          "networkProfile": {
+            "networkInterfaces": [
+              {
+                "id": "[resourceId('Microsoft.Network/networkInterfaces',concat(variables('networkInterfaceName'),copyIndex(1)))]"
+              }
+            ]
+          },
+          "osProfile": {
+            "computerName": "[concat(variables('vmName'),copyIndex(1))]",
+            "adminUsername": "[parameters('adminUsername')]",
+            "adminPassword": "[parameters('adminPassword')]",
+            "windowsConfiguration": {
+              "enableAutomaticUpdates": true,
+              "provisionVmAgent": true
+            }
+          }
+        }
+      }
+    ],
+    "outputs": {
+    }
+  }
